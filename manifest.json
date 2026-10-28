@@ -1,0 +1,10 @@
+{
+  "id": "confluence-publisher",
+  "name": "Confluence Publisher",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Publish the current note to Confluence Cloud with the cpub command-line tool: replace a page or create a child page, preview first, and only update pages cpub already manages.",
+  "author": "Ronny Pacheco",
+  "authorUrl": "https://github.com/RPacheco-TC",
+  "isDesktopOnly": true
+}
