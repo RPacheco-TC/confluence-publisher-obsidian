@@ -2,6 +2,8 @@
 .cpub-output {
   white-space: pre-wrap;
   user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
   max-height: 60vh;
   overflow: auto;
   font-size: var(--font-ui-smaller);

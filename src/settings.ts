@@ -1,5 +1,5 @@
 import {
-  PluginSettingTab, Setting, type App, type Plugin, type SettingDefinitionItem,
+  PluginSettingTab, type App, type Plugin, type SettingDefinitionItem,
 } from 'obsidian';
 import { INSTALL_LINE } from './texts.ts';
 
@@ -28,9 +28,8 @@ type Key = keyof PublisherSettings;
 const TIMEOUT_ERROR = `At least ${MIN_TIMEOUT_SECONDS} seconds.`;
 
 /**
- * The settings: declarative (getSettingDefinitions, searchable in Obsidian >= 1.13)
- * with display() as the fallback for older apps (AC-G.5). Both write through
- * ``apply``, so validation and side effects are the same in either.
+ * The settings, declared with getSettingDefinitions (Obsidian >= 1.13, searchable).
+ * Every change goes through ``apply``: validate, store, side effects, persist.
  */
 export class PublisherSettingTab extends PluginSettingTab {
   private readonly host: SettingsHost;
@@ -48,11 +47,6 @@ export class PublisherSettingTab extends PluginSettingTab {
     }
     return detected ? `Leave empty to use the detected ${detected}.` :
       `cpub was not found in the usual places. Install it with: ${INSTALL_LINE}`;
-  }
-
-  /** Detect cpub again in the background, then redraw with the result. */
-  private refresh(redraw: () => void): void {
-    void this.host.refreshDetectedCpub().then(redraw);
   }
 
   /** Also called once at load for search indexing, so it never runs cpub itself. */
@@ -79,18 +73,16 @@ export class PublisherSettingTab extends PluginSettingTab {
           validate: (v: number) => (isValidTimeout(v) ? undefined : TIMEOUT_ERROR) },
       },
       {
+        name: 'Detect cpub',
+        desc: 'Look for cpub in the usual folders now and show the result above.',
+        action: () => { void host.refreshDetectedCpub(); },   // redraws via update()
+      },
+      {
         name: 'Check cpub setup',
         desc: 'Runs cpub check: credentials, connection, sign-in and diagrams.',
         action: () => { void host.runCheck(); },
       },
     ];
-  }
-
-  private refreshed = false;
-
-  hide(): void {
-    this.refreshed = false;
-    super.hide();
   }
 
   getControlValue(key: string): unknown {
@@ -116,45 +108,5 @@ export class PublisherSettingTab extends PluginSettingTab {
       return;                                       // invalid: nothing stored
     }
     await host.saveSettings();
-  }
-
-  /** Obsidian < 1.13 only (not called when getSettingDefinitions returns items). */
-  display(): void {
-    const { containerEl } = this;
-    const host = this.host;
-    containerEl.empty();
-    if (!this.refreshed) {
-      this.refreshed = true;
-      this.refresh(() => this.display());
-    }
-
-    new Setting(containerEl)
-      .setName('cpub path')
-      .setDesc(this.pathDesc())
-      .addText((t) => t
-        .setPlaceholder(host.detectedCpub() || '/Users/you/.local/bin/cpub')
-        .setValue(host.settings.cpubPath)
-        .onChange((v) => this.apply('cpubPath', v)));
-
-    new Setting(containerEl)
-      .setName('Show ribbon button')
-      .setDesc('A ribbon button that publishes the current note.')
-      .addToggle((t) => t
-        .setValue(host.settings.showRibbon)
-        .onChange((v) => this.apply('showRibbon', v)));
-
-    new Setting(containerEl)
-      .setName('Timeout (seconds)')
-      .setDesc('cpub is stopped if it takes longer than this. Rendering many diagrams ' +
-        'can take a while.')
-      .addText((t) => t
-        .setPlaceholder(String(DEFAULT_SETTINGS.timeoutSeconds))
-        .setValue(String(host.settings.timeoutSeconds))
-        .onChange((v) => this.apply('timeoutSeconds', Number(v))));
-
-    new Setting(containerEl)
-      .setName('Check cpub setup')
-      .setDesc('Runs cpub check: credentials, connection, sign-in and diagrams.')
-      .addButton((b) => b.setButtonText('Run check').onClick(() => { void host.runCheck(); }));
   }
 }

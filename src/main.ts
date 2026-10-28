@@ -37,7 +37,7 @@ export default class ConfluencePublisherPlugin extends Plugin implements Setting
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (t) => { window.clearTimeout(t as number); },
   });
-  private settingTab!: PublisherSettingTab;
+  private settingTab: PublisherSettingTab | null = null;
 
   async onload(): Promise<void> {
     const saved: unknown = await this.loadData();
@@ -95,10 +95,9 @@ export default class ConfluencePublisherPlugin extends Plugin implements Setting
     await this.cpub.detect();
   }
 
-  /** Re-read the declarative settings after a detection (update() exists from 1.13). */
+  /** Re-read the settings definitions after a detection (shows the detected path). */
   private refreshSettingTab(): void {
-    const tab = this.settingTab as { update?: () => void } | undefined;
-    if (tab && typeof tab.update === 'function') tab.update();
+    this.settingTab?.update();
   }
 
   forgetCpubVersions(): void {

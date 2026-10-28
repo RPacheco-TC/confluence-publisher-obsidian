@@ -1,6 +1,6 @@
 {
   "name": "cpub",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Obsidian plugin: publish the current note to Confluence Cloud with the cpub command-line tool.",
   "private": true,
   "license": "MIT",
