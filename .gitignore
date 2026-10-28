@@ -1,3 +1,5 @@
 .idea/
 .DS_Store
 node_modules/
+# build artifact (attached to each release): npm run build
+main.js

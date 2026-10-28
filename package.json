@@ -1,0 +1,19 @@
+{
+  "name": "confluence-publisher",
+  "version": "0.2.0",
+  "description": "Obsidian plugin: publish the current note to Confluence Cloud with the cpub command-line tool.",
+  "private": true,
+  "license": "MIT",
+  "author": "Ronny Pacheco",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "esbuild": "0.28.2",
+    "obsidian": "1.14.4",
+    "typescript": "7.0.2"
+  }
+}

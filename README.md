@@ -66,6 +66,19 @@ Undo is not in the plugin: `cpub undo` always asks for confirmation, so run it f
 - **Timeout (seconds)**.
 - **Run check**: the same as the *Check cpub setup* command.
 
+## Development
+
+The plugin is written in TypeScript (`src/`) and bundled into `main.js` with esbuild; `main.js` is a build artifact, attached to each release and not kept in git. The only dependencies are development tools, pinned to exact versions; the plugin itself has no runtime dependencies.
+
+```bash
+npm ci              # install the pinned dev tools
+npm run build       # src/main.ts -> main.js
+npm run typecheck   # tsc --noEmit (strict)
+npm test            # node --test on the .ts sources (Node 23.6+ strips the types)
+```
+
+To try a build, copy `main.js`, `manifest.json` and `styles.css` into `<vault>/.obsidian/plugins/confluence-publisher/` and reload Obsidian.
+
 ## License
 
 MIT
