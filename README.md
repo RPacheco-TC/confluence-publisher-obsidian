@@ -1,4 +1,4 @@
-# Confluence Publisher
+# cpub for Confluence
 
 Publish the note you are looking at to **Confluence Cloud** with one command or hotkey.
 
@@ -66,6 +66,10 @@ Undo is not in the plugin: `cpub undo` always asks for confirmation, so run it f
 - **Timeout (seconds)**.
 - **Run check**: the same as the *Check cpub setup* command.
 
+## Upgrading from 0.1 or 0.2
+
+Until 0.3.0 the plugin was called "Confluence Publisher", with the id `confluence-publisher`. Obsidian keeps hotkeys and settings per plugin id, so 0.3.0 is a new plugin to it: remove the old `<vault>/.obsidian/plugins/confluence-publisher/` folder, install 0.3.0 into `plugins/cpub/`, then bind your hotkeys again (the commands have the same names) and re-enter the **cpub path** if you had set one.
+
 ## Development
 
 The plugin is written in TypeScript (`src/`) and bundled into `main.js` with esbuild; `main.js` is a build artifact, attached to each release and not kept in git. The only dependencies are development tools, pinned to exact versions; the plugin itself has no runtime dependencies.
@@ -77,7 +81,7 @@ npm run typecheck   # tsc --noEmit (strict)
 npm test            # node --test on the .ts sources (Node 23.6+ strips the types)
 ```
 
-To try a build, copy `main.js`, `manifest.json` and `styles.css` into `<vault>/.obsidian/plugins/confluence-publisher/` and reload Obsidian.
+To try a build, copy `main.js`, `manifest.json` and `styles.css` into `<vault>/.obsidian/plugins/cpub/` and reload Obsidian.
 
 ## License
 

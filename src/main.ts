@@ -1,5 +1,5 @@
 /*
- * Confluence Publisher: publish the current Obsidian note to Confluence Cloud by
+ * cpub for Confluence: publish the current Obsidian note to Confluence Cloud by
  * running the `cpub` command-line tool.
  *
  * The plugin never reads, stores or sends Confluence credentials and makes no
