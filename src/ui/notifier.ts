@@ -7,8 +7,8 @@ import { OutputModal } from './output-modal.ts';
 type Extra = (frag: DocumentFragment) => void;
 
 /**
- * Every message the plugin shows. Notices are built from DOM text nodes only,
- * never innerHTML (D32).
+ * Every message the plugin shows, built with Obsidian's createFragment / createEl
+ * / appendText: text only, never innerHTML (D32, AC-G.3).
  */
 export class Notifier {
   private readonly app: App;
@@ -21,12 +21,13 @@ export class Notifier {
 
   /** One line per "\n"; ``timeout`` 0 keeps it until clicked (default 8 s). */
   message(text: string, timeout = 8000, extra?: Extra): Notice {
-    const frag = document.createDocumentFragment();
-    text.split('\n').forEach((line, i) => {
-      if (i) frag.appendChild(document.createElement('br'));
-      frag.appendChild(document.createTextNode(line));
+    const frag = createFragment((f) => {
+      text.split('\n').forEach((line, i) => {
+        if (i) f.createEl('br');
+        f.appendText(line);
+      });
+      if (extra) extra(f);
     });
-    if (extra) extra(frag);
     return new Notice(frag, timeout);
   }
 
@@ -49,21 +50,15 @@ export class Notifier {
     const output = this.fullOutput(res);
     const addLinks: Extra = (frag) => {
       if (s.pageUrl) {
-        frag.appendChild(document.createElement('br'));
-        const a = document.createElement('a');
-        a.href = s.pageUrl;
-        a.textContent = 'Open the page';
-        frag.appendChild(a);
+        frag.createEl('br');
+        frag.createEl('a', { text: 'Open the page', href: s.pageUrl });
       }
-      frag.appendChild(document.createElement('br'));
-      const show = document.createElement('a');
-      show.textContent = 'Show full output';
-      show.href = '#';
+      frag.createEl('br');
+      const show = frag.createEl('a', { text: 'Show full output', href: '#' });
       show.addEventListener('click', (ev) => {
         ev.preventDefault();
         new OutputModal(this.app, title, output).open();
       });
-      frag.appendChild(show);
     };
     if (res.timedOut) {
       this.message(`cpub did not finish within ${this.timeoutMs() / 1000} s and was ` +

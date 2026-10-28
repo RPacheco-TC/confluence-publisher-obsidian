@@ -1,0 +1,68 @@
+# Signed releases (AC-G.8): a pushed version tag (e.g. 0.3.1, no "v", as Obsidian
+# expects) builds the plugin on GitHub, attests the build provenance of main.js and
+# styles.css, and publishes the GitHub release the community store installs from.
+# Actions are pinned to full commit SHAs; the token gets only what each step needs.
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write      # create the GitHub release and upload its assets
+      id-token: write      # sign the provenance attestation (Sigstore, OIDC)
+      attestations: write  # store the attestation on the repository
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '26'
+          # no `cache: npm`: a signed build must not restore a cache other runs wrote
+          # (cache poisoning); npm ci from package-lock.json is fast enough
+
+      - name: The tag must match manifest.json and package.json
+        run: |
+          manifest="$(node -p "require('./manifest.json').version")"
+          package="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$manifest" ] || [ "$GITHUB_REF_NAME" != "$package" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, manifest.json $manifest, package.json $package"
+            exit 1
+          fi
+
+      - name: Install the exact dev dependencies (package-lock.json)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build main.js
+        run: npm run build
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: |
+            main.js
+            styles.css
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css \
+            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes

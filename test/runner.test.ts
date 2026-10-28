@@ -4,29 +4,69 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { CpubArgs, CpubLocator, CpubRunner, CpubVersion, MIN_CPUB } from '../src/cpub/runner.ts';
-import type { RunResult, SpawnFn } from '../src/cpub/runner.ts';
+import type { RunnerDeps, RunResult, SpawnFn } from '../src/cpub/runner.ts';
 import { CpubResult } from '../src/cpub/result.ts';
 
+/** Node's timers: what the tests inject where the plugin passes window's (G.2). */
+const NODE_TIMERS: RunnerDeps = {
+  setTimer: (fn, ms) => setTimeout(fn, ms),
+  clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+};
+
+type RunOpts = { cwd: string; env: NodeJS.ProcessEnv; timeoutMs?: number } & Partial<RunnerDeps>;
+
 /** The 0.1.0 call shape, kept so every ported assertion reads as before. */
-function runCpub(spawn: SpawnFn, cmd: string, args: string[],
-  opts: Record<string, any>): Promise<RunResult> {
+function runCpub(spawn: SpawnFn, cmd: string, args: string[], opts: RunOpts): Promise<RunResult> {
   const { cwd, env, timeoutMs, ...deps } = opts;
-  return new CpubRunner(spawn, deps).run(cmd, args, { cwd, env, timeoutMs });
+  return new CpubRunner(spawn, { ...NODE_TIMERS, ...deps }).run(cmd, args, { cwd, env, timeoutMs });
+}
+
+/** A spawn whose children answer by path: 'ok' prints a version, 'fail' exits 1,
+ * anything else is a spawn error with that code (ENOENT, EACCES, ...). */
+function scriptedSpawn(answers: Record<string, string>): SpawnFn & { seen: string[] } {
+  const seen: string[] = [];
+  const fn = ((cmd: string) => {
+    seen.push(cmd);
+    const child = new FakeChild([]);
+    const answer = answers[cmd] ?? 'ENOENT';
+    setImmediate(() => {
+      if (answer === 'ok') {
+        child.stdout.emit('data', 'cpub 1.4.0\n');
+        child.emit('close', 0, null);
+      } else if (answer === 'fail') {
+        child.emit('close', 1, null);
+      } else {
+        child.emit('error', Object.assign(new Error(answer), { code: answer }));
+      }
+    });
+    return child;
+  }) as unknown as SpawnFn & { seen: string[] };
+  fn.seen = seen;
+  return fn;
 }
 
 const HOME = '/Users/me';
 const BINS = ['/Users/me/.local/bin', '/opt/homebrew/bin', '/usr/local/bin'];
 
-test('cpub is looked for in ~/.local/bin, Homebrew, /usr/local/bin, in that order', () => {
+test('cpub is looked for in ~/.local/bin, Homebrew, /usr/local/bin, in that order', async () => {
   assert.deepEqual(new CpubLocator(HOME).candidates(), BINS.map((d) => `${d}/cpub`));
   const locator = new CpubLocator(HOME);
-  assert.equal(locator.detect((p) => p.startsWith('/opt/')), '/opt/homebrew/bin/cpub');
-  assert.equal(new CpubLocator(HOME).detect(() => false), null);
-  const exists = (p: string): boolean => {
-    if (p.startsWith('/Users')) throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
-    return p.startsWith('/usr/local');
+  const find = (answers: Record<string, string>) => {
+    const spawn = scriptedSpawn(answers);
+    return locator.find(new CpubRunner(spawn, NODE_TIMERS), { cwd: '/', env: {} })
+      .then((found) => ({ found, seen: spawn.seen }));
   };
-  assert.equal(locator.detect(exists), '/usr/local/bin/cpub');      // unreadable: skipped
+  const opt = await find({ '/opt/homebrew/bin/cpub': 'ok' });     // probed with --version
+  assert.equal(opt.found?.path, '/opt/homebrew/bin/cpub');
+  assert.equal(opt.found?.version, '1.4.0');
+  assert.deepEqual(opt.seen, ['/Users/me/.local/bin/cpub', '/opt/homebrew/bin/cpub']);
+  assert.equal((await find({})).found, null);                     // none starts
+  const skipped = await find({ '/Users/me/.local/bin/cpub': 'EACCES',
+    '/opt/homebrew/bin/cpub': 'ENOTDIR', '/usr/local/bin/cpub': 'ok' });
+  assert.equal(skipped.found?.path, '/usr/local/bin/cpub');       // unreadable: skipped
+  const broken = await find({ '/Users/me/.local/bin/cpub': 'fail' });
+  assert.deepEqual([broken.found?.path, broken.found?.version],   // starts but fails: found,
+    ['/Users/me/.local/bin/cpub', null]);                         // reported as broken
 });
 
 test('the child PATH keeps the user PATH and adds the bin folders once', () => {
@@ -151,7 +191,7 @@ test('runCpub: a timeout stops the whole process group, then SIGKILLs it', async
   const spawn = fakeSpawn(), clock = timers(), kills: [number, string][] = [];
   const p = runCpub(spawn, 'cpub', ['/v/n.md'], { cwd: '/', env: {}, timeoutMs: 120000,
     platform: 'darwin', graceMs: 3000,
-    kill: (pid: number, sig: string) => { kills.push([pid, sig]); },
+    kill: (pid, sig) => { kills.push([pid, sig]); },
     setTimer: clock.setTimer, clearTimer: clock.clearTimer });
   assert.deepEqual(clock.pending.map((t) => t.ms), [120000]);
   clock.fire();                                            // the timeout
@@ -175,8 +215,7 @@ test('runCpub: no timeout timer survives a normal exit; Windows taskkills the tr
   const win = fakeSpawn(), wclock = timers(), taskkills: unknown[] = [];
   const w = runCpub(win, 'cpub.exe', [], { cwd: 'C:\\', env: {}, timeoutMs: 5,
     platform: 'win32', kill: () => assert.fail('no group kill on Windows'),
-    execFile: (cmd: string, args: string[], opts: { shell?: boolean }) =>
-      taskkills.push([cmd, args, opts.shell]),
+    execFile: (cmd, args, opts) => taskkills.push([cmd, args, (opts as { shell?: boolean }).shell]),
     setTimer: wclock.setTimer, clearTimer: wclock.clearTimer });
   assert.equal(win.calls[0].opts.detached, false);           // no new console window
   wclock.fire();

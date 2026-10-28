@@ -59,6 +59,14 @@ Undo is not in the plugin: `cpub undo` always asks for confirmation, so run it f
 - It runs `cpub` directly (no shell), so note names are never interpreted as commands.
 - It never passes `--adopt` or any other flag that would let it take over a page `cpub` did not publish.
 
+## What this plugin accesses
+
+- **Programs:** it runs only `cpub` (the path you set, or the first of `~/.local/bin/cpub`, `/opt/homebrew/bin/cpub`, `/usr/local/bin/cpub` that answers `cpub --version`), directly with Node's `child_process`, **never through a shell**. Arguments are the note's absolute path and, for a preview, `--dry-run`, or `check`. Never `--adopt`, never `undo`.
+- **Network:** none. The plugin makes no requests; only `cpub` talks to Confluence.
+- **Credentials:** none. The plugin never reads, stores or sends them; `cpub` keeps its own.
+- **Files:** none of its own. It saves the open note through Obsidian before publishing, and stores its three settings with Obsidian's plugin data.
+- **Clipboard:** written only when you click **Copy** in the output window; never read.
+
 ## Settings
 
 - **cpub path**: empty means auto-detect.
@@ -66,7 +74,12 @@ Undo is not in the plugin: `cpub undo` always asks for confirmation, so run it f
 - **Timeout (seconds)**.
 - **Run check**: the same as the *Check cpub setup* command.
 
-## Upgrading from 0.1 or 0.2
+## Upgrading
+
+- **From 0.3.0:** the *Check cpub setup* command has a new id (`check-setup`), so a hotkey bound to it must be bound again. Publish and Preview keep theirs.
+- **From 0.1 or 0.2:** see below.
+
+### Upgrading from 0.1 or 0.2
 
 Until 0.3.0 the plugin was called "Confluence Publisher", with the id `confluence-publisher`. Obsidian keeps hotkeys and settings per plugin id, so 0.3.0 is a new plugin to it: remove the old `<vault>/.obsidian/plugins/confluence-publisher/` folder, install 0.3.0 into `plugins/cpub/`, then bind your hotkeys again (the commands have the same names) and re-enter the **cpub path** if you had set one.
 

@@ -13,12 +13,18 @@ import {
   FileSystemAdapter, MarkdownView, Notice, Plugin, type TFile,
 } from 'obsidian';
 import { CpubCommand } from './cpub-command.ts';
-import { CpubArgs, CpubLocator, CpubRunner, type RunResult } from './cpub/runner.ts';
+import {
+  CpubArgs, CpubLocator, CpubRunner, type RunResult, type SpawnFn,
+} from './cpub/runner.ts';
 import {
   DEFAULT_SETTINGS, PublisherSettingTab, type PublisherSettings, type SettingsHost,
 } from './settings.ts';
+import { parseSettings } from './settings-data.ts';
 import { KINDS, type NoteKind } from './texts.ts';
 import { Notifier } from './ui/notifier.ts';
+
+/** Node's spawn behind the runner's structural SpawnFn (its overloads don't match it). */
+const spawnCpub: SpawnFn = (cmd, args, opts) => spawn(cmd, [...args], opts);
 
 export default class ConfluencePublisherPlugin extends Plugin implements SettingsHost {
   settings: PublisherSettings = { ...DEFAULT_SETTINGS };
@@ -26,14 +32,22 @@ export default class ConfluencePublisherPlugin extends Plugin implements Setting
   private ribbon: HTMLElement | null = null;
   private notifier!: Notifier;
   private cpub!: CpubCommand;
-  private readonly runner = new CpubRunner(spawn);
+  // Obsidian's window timers (AC-G.2); the tests inject Node's.
+  private readonly runner = new CpubRunner(spawnCpub, {
+    setTimer: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimer: (t) => { window.clearTimeout(t as number); },
+  });
+  private settingTab!: PublisherSettingTab;
 
   async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved: unknown = await this.loadData();
+    this.settings = parseSettings(saved);            // AC-G.1: typed, validated
     this.notifier = new Notifier(this.app, () => this.timeoutMs());
-    this.cpub = new CpubCommand(homedir, () => this.settings.cpubPath || '',
+    this.cpub = new CpubCommand(() => this.settings.cpubPath || '',
       (cmd, args, timeoutMs) => this.exec(cmd, args, timeoutMs),
-      (text) => { this.notifier.message(text, 0); });
+      () => new CpubLocator(homedir()).find(this.runner, this.runOptions()),
+      (text) => { this.notifier.message(text, 0); },
+      () => this.refreshSettingTab());
 
     // The ids and names are those of 0.1.0, so existing hotkeys keep working (AC-F.4).
     this.addCommand({
@@ -47,11 +61,12 @@ export default class ConfluencePublisherPlugin extends Plugin implements Setting
       checkCallback: (checking) => this.noteCommand(checking, 'dry'),
     });
     this.addCommand({
-      id: 'check-cpub-setup',
+      id: 'check-setup',              // AC-G.4: no plugin id inside a command id
       name: 'Check cpub setup',
       callback: () => { void this.runCheck(); },
     });
-    this.addSettingTab(new PublisherSettingTab(this.app, this));
+    this.settingTab = new PublisherSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
     this.updateRibbon();
   }
 
@@ -72,8 +87,18 @@ export default class ConfluencePublisherPlugin extends Plugin implements Setting
     }
   }
 
-  detectedCpub(): string | null {
+  detectedCpub(): string | null | undefined {
     return this.cpub.detected();
+  }
+
+  async refreshDetectedCpub(): Promise<void> {
+    await this.cpub.detect();
+  }
+
+  /** Re-read the declarative settings after a detection (update() exists from 1.13). */
+  private refreshSettingTab(): void {
+    const tab = this.settingTab as { update?: () => void } | undefined;
+    if (tab && typeof tab.update === 'function') tab.update();
   }
 
   forgetCpubVersions(): void {
@@ -97,14 +122,17 @@ export default class ConfluencePublisherPlugin extends Plugin implements Setting
     return (Number.isFinite(s) && s >= 10 ? s : DEFAULT_SETTINGS.timeoutSeconds) * 1000;
   }
 
-  /** cpub with the vault root as cwd (else the home folder) and a PATH that finds it. */
-  private exec(cmd: string, args: string[], timeoutMs: number): Promise<RunResult> {
+  /** The vault root as cwd (else the home folder) and a PATH that also finds cpub. */
+  private runOptions(): { cwd: string; env: NodeJS.ProcessEnv } {
     const adapter = this.adapter();
-    return this.runner.run(cmd, args, {
+    return {
       cwd: adapter ? adapter.getBasePath() : homedir(),
       env: new CpubLocator(homedir()).childEnv(process.env),
-      timeoutMs,
-    });
+    };
+  }
+
+  private exec(cmd: string, args: string[], timeoutMs: number): Promise<RunResult> {
+    return this.runner.run(cmd, args, { ...this.runOptions(), timeoutMs });
   }
 
   // -- commands --

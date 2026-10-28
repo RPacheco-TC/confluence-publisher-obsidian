@@ -7,6 +7,8 @@ import type { SpawnOptions } from 'node:child_process';
 
 export const MIN_CPUB = '1.4.0';
 export const KILL_GRACE_MS = 3000;
+/** How long one `<candidate> --version` probe may take while looking for cpub. */
+export const FIND_TIMEOUT_MS = 15000;
 const OUTPUT_LIMIT = 16 * 1024 * 1024;
 
 export type CommandKind = 'publish' | 'dry' | 'check';
@@ -21,7 +23,7 @@ export interface RunResult {
 }
 
 interface EmitterLike {
-  on(event: string, listener: (...args: any[]) => void): unknown;
+  on(event: string, listener: (...args: unknown[]) => void): unknown;
 }
 
 /** The part of a ChildProcess the runner uses (tests pass a fake). */
@@ -34,7 +36,15 @@ export interface ChildLike extends EmitterLike {
 
 export type SpawnFn = (cmd: string, args: readonly string[], opts: SpawnOptions) => ChildLike;
 export type ExecFileFn = (file: string, args: readonly string[], opts: object,
-  callback: (...args: any[]) => void) => unknown;
+  callback: (error: Error | null) => void) => unknown;
+
+/** A cpub found by {@link CpubLocator.find}: its path and what `--version` said. */
+export interface FoundCpub {
+  path: string;
+  result: RunResult;
+  /** null when `--version` failed or printed no x.y.z (a broken install). */
+  version: string | null;
+}
 
 /** Where cpub is looked for, and the PATH it is started with. */
 export class CpubLocator {
@@ -53,14 +63,19 @@ export class CpubLocator {
     return this.binDirs().map((dir) => path.join(dir, 'cpub'));
   }
 
-  /** The first candidate `exists` accepts, or null; a throwing check means no. */
-  detect(exists: (p: string) => boolean): string | null {
+  /**
+   * The first candidate that starts, found by running `<candidate> --version`
+   * (no shell, no filesystem access): a spawn error (ENOENT, EACCES, ...) means "not
+   * here", so the next one is tried. A candidate that starts but fails still wins,
+   * with version null, so the caller can say it is broken. null when none starts.
+   */
+  async find(runner: CpubRunner, opts: RunOptions): Promise<FoundCpub | null> {
     for (const candidate of this.candidates()) {
-      try {
-        if (exists(candidate)) return candidate;
-      } catch {
-        /* unreadable: try the next one */
-      }
+      const result = await runner.run(candidate, ['--version'],
+        { timeoutMs: FIND_TIMEOUT_MS, ...opts });
+      if (result.spawnError) continue;
+      const version = result.code === 0 ? CpubVersion.parse(result.stdout) : null;
+      return { path: candidate, result, version };
     }
     return null;
   }
@@ -107,12 +122,16 @@ export class CpubVersion {
   }
 }
 
+/**
+ * What the runner needs from its host. The timers are required: the plugin passes
+ * window.setTimeout / window.clearTimeout, the tests pass Node's (or manual ones).
+ */
 export interface RunnerDeps {
+  setTimer: (fn: () => void, ms: number) => unknown;
+  clearTimer: (timer: unknown) => void;
   kill?: (pid: number, signal: NodeJS.Signals) => void;
   platform?: NodeJS.Platform;
   execFile?: ExecFileFn;
-  setTimer?: (fn: () => void, ms: number) => unknown;
-  clearTimer?: (timer: unknown) => void;
   graceMs?: number;
 }
 
@@ -133,7 +152,7 @@ export class CpubRunner {
   readonly spawn: SpawnFn;
   readonly deps: RunnerDeps;
 
-  constructor(spawn: SpawnFn, deps: RunnerDeps = {}) {
+  constructor(spawn: SpawnFn, deps: RunnerDeps) {
     this.spawn = spawn;
     this.deps = deps;
   }
@@ -143,9 +162,7 @@ export class CpubRunner {
     const kill = d.kill ?? ((pid: number, sig: NodeJS.Signals) => { process.kill(pid, sig); });
     const platform = d.platform ?? process.platform;
     const graceMs = d.graceMs ?? KILL_GRACE_MS;
-    const setTimer = d.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
-    const clearTimer = d.clearTimer ??
-      ((t: unknown) => clearTimeout(t as ReturnType<typeof setTimeout>));
+    const { setTimer, clearTimer } = d;
     return new Promise((resolve) => {
       const out: RunResult = { code: null, stdout: '', stderr: '', timedOut: false,
         spawnError: null };
@@ -215,4 +232,4 @@ function errorCode(e: unknown): string {
 
 /** child_process.execFile, for the Windows taskkill only. */
 const defaultExecFile: ExecFileFn = (file, args, opts, callback) =>
-  nodeExecFile(file, [...args], opts, callback);
+  nodeExecFile(file, [...args], opts, (error) => callback(error));
