@@ -2,15 +2,15 @@
 
 Publish the note you are looking at to **Confluence Cloud** with one command or hotkey.
 
-The plugin is a thin front end for [`cpub`](https://github.com/RPacheco-TC/confluence-obsidian-publisher), a command-line tool that converts Markdown (callouts, tables, code, Mermaid diagrams, `[[links]]`) to Confluence pages and publishes them safely: every run is planned and checked before anything is written, it only updates pages it published itself, and it never deletes or moves anything.
+The plugin is a thin front end for [`cpub`](https://github.com/RPacheco-TC/cpub-cli), a command-line tool that converts Markdown (callouts, tables, code, Mermaid diagrams, `[[links]]`) to Confluence pages and publishes them safely: every run is planned and checked before anything is written, it only updates pages it published itself, and it never deletes or moves anything.
 
 ## Requirements
 
 - **Desktop Obsidian 1.13 or newer** (macOS, Linux, Windows). The plugin runs a program on your computer, so it does not work on mobile.
-- **`cpub` 1.4.1**, the current release (1.4.0 also works). Install it once from a terminal ([uv](https://docs.astral.sh/uv/) brings its own Python):
+- **`cpub` 1.4.2**, the current release (1.4.0 or newer works). Install it once from a terminal ([uv](https://docs.astral.sh/uv/) brings its own Python):
 
   ```bash
-  uv tool install git+https://github.com/RPacheco-TC/confluence-obsidian-publisher
+  uv tool install git+https://github.com/RPacheco-TC/cpub-cli
   cpub setup     # asks for your Confluence site, email and API token, tests them, saves them
   ```
 
@@ -77,7 +77,9 @@ Undo is not in the plugin: `cpub undo` always asks for confirmation, so run it f
 
 ## Upgrading
 
-- **From 0.3.1:** 0.3.2 needs Obsidian 1.13 or newer (older apps keep 0.3.1). The output window has no **Copy** button any more: select the text instead. If `cpub` was installed before 1.4.1, its package was renamed, so reinstall it once: `uv tool uninstall obx-confluence-obsidian-publisher`, then `uv tool install git+https://github.com/RPacheco-TC/confluence-obsidian-publisher` (pipx: `pipx uninstall obx-confluence-obsidian-publisher`, then `pipx install git+…`). Your credentials, log and pages are kept.
+- **From 0.3.2:** nothing changes in the plugin; only `cpub`'s links are new.
+- **From 0.3.1:** 0.3.2 needs Obsidian 1.13 or newer (older apps keep 0.3.1). The output window has no **Copy** button any more: select the text instead.
+- **`cpub` installed before 1.4.2?** Its package was renamed: run `uv tool list` to see its old name (`obx-confluence-obsidian-publisher` or `confluence-obsidian-publisher`), `uv tool uninstall <that name>`, then `uv tool install git+https://github.com/RPacheco-TC/cpub-cli`. pipx: the same (`pipx list`, `pipx uninstall`, `pipx install git+…`). Your credentials, log and pages are kept. Update later with `uv tool upgrade cpub-cli`.
 - **From 0.3.0:** the *Check cpub setup* command has a new id (`check-setup`), so a hotkey bound to it must be bound again. Publish and Preview keep theirs.
 - **From 0.1 or 0.2:** see below.
 
